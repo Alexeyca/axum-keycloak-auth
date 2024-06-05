@@ -70,6 +70,19 @@ where
         let passthrough_mode = cloned_layer.passthrough_mode;
 
         Box::pin(async move {
+            let prev_keycloak_status = request.extensions().get::<KeycloakAuthStatus::<R, Extra>>();
+
+            if let Some(status) = prev_keycloak_status {
+                match status {
+                    KeycloakAuthStatus::Success(_) => {
+                        //skip current layer check if previous was successful
+                        return inner.call(request).await;
+                    }
+                    KeycloakAuthStatus::Failure(_) => {
+                    }
+                }
+            }
+
             match process_request(&cloned_layer, request.headers().clone()).await {
                 Ok((raw_claims, keycloak_token)) => {
                     if let Some(raw_claims) = raw_claims {

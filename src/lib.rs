@@ -85,7 +85,7 @@
 //!         StatusCode::OK,
 //!         format!(
 //!             "Hello {name} ({subject}). Your token is valid for another {valid_for} seconds.",
-//!             name = token.extra.profile.preferred_username,
+//!             name = token.extra.profile.unwrap().preferred_username.unwrap(),
 //!             subject = token.subject,
 //!             valid_for = (token.expires_at - time::OffsetDateTime::now_utc()).whole_seconds()
 //!         ),
