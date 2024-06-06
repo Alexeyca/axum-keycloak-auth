@@ -34,7 +34,15 @@ impl<'a> RawToken<'a> {
         decoding_keys: impl Iterator<Item = &'d jsonwebtoken::DecodingKey>,
     ) -> Result<RawClaims, AuthError> {
         let mut validation = jsonwebtoken::Validation::new(header.alg);
-        validation.set_audience(expected_audiences);
+
+
+        if !expected_audiences.is_empty() {
+            validation.set_audience(expected_audiences);
+            validation.validate_aud = true;
+        } else {
+            validation.aud = None;
+            validation.validate_aud = false;
+        }
 
         let mut token_data: Result<
             jsonwebtoken::TokenData<HashMap<String, serde_json::Value>>,
