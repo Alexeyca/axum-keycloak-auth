@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::i64;
 use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
@@ -133,7 +134,7 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StandardClaims<Extra> {
     /// Expiration time (unix timestamp).
-    pub exp: i64,
+    pub exp: Option<i64>,
     /// Issued at time (unix timestamp).
     pub iat: i64,
     /// JWT ID (unique identifier for this token).
@@ -141,8 +142,8 @@ pub struct StandardClaims<Extra> {
     /// Issuer (who created and signed this token). This is the UUID which uniquely identifies this user inside Keycloak.
     pub iss: String,
     /// Audience (who or what the token is intended for).
-    #[serde_as(deserialize_as = "OneOrMany<_>")]
-    pub aud: Vec<String>,
+    #[serde_as(deserialize_as = "Option<OneOrMany<_>>")]
+    pub aud: Option<Vec<String>>,
     /// Subject (whom the token refers to).
     pub sub: String,
     /// Type of token.
@@ -220,7 +221,7 @@ where
     /// Issuer (who created and signed this token).
     pub issuer: String,
     /// Audience (who or what the token is intended for).
-    pub audience: Vec<String>,
+    pub audience: Option<Vec<String>>,
     /// Subject (whom the token refers to). This is the UUID which uniquely identifies this user inside Keycloak.
     pub subject: String,
     /// Authorized party (the party to which this token was issued).
@@ -239,7 +240,7 @@ where
 {
     pub(crate) fn parse(raw: StandardClaims<Extra>) -> Result<Self, AuthError> {
         Ok(Self {
-            expires_at: time::OffsetDateTime::from_unix_timestamp(raw.exp).map_err(|err| {
+            expires_at: time::OffsetDateTime::from_unix_timestamp(raw.exp.map_or(i64::MAX, |x| x)).map_err(|err| {
                 AuthError::InvalidToken {
                     reason: format!(
                         "Could not parse 'exp' (expires_at) field as unix timestamp: {err}"
