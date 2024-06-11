@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::i64;
 use std::sync::Arc;
+use jsonwebtoken::{Algorithm, DecodingKey};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use serde_with::{serde_as, OneOrMany};
 use snafu::ResultExt;
 use tracing::debug;
@@ -82,10 +84,22 @@ pub(crate) async fn decode_and_validate(
         // but may allow us to acknowledge it in the end without rejecting the call immediately,
         // which would then require a retry from our caller!
         #[allow(clippy::unwrap_used)]
-        let retry = match raw_claims.as_ref().unwrap_err() {
-            AuthError::NoDecodingKeys | AuthError::Decode { source: _ } => {
+            let retry = match raw_claims.as_ref().unwrap_err() {
+            AuthError::NoDecodingKeys => {
                 kc_instance.perform_oidc_discovery().await;
                 true
+            }
+            AuthError::Decode { source: _ } => {
+                let realm = kc_instance.config.realm.clone();
+                let keys = kc_instance.decoding_keys().await;
+                let decoding_key = keys.iter().next();
+
+                if contains_realm(decoding_key, raw_token.0, realm) {
+                    kc_instance.perform_oidc_discovery().await;
+                    true
+                } else {
+                    false
+                }
             }
             _ => false,
         };
@@ -93,11 +107,47 @@ pub(crate) async fn decode_and_validate(
         // Second decode
         if retry {
             let decoding_keys = kc_instance.decoding_keys().await;
+
             raw_claims = raw_token.decode_and_validate(&header, expected_audiences, decoding_keys.iter());
         }
     }
 
     raw_claims
+}
+
+fn contains_realm(
+    key: Option<&DecodingKey>,
+    token: &str,
+    realm: String) -> bool {
+
+    if key.is_none() {
+        return false;
+    }
+
+    let mut validation = jsonwebtoken::Validation::new(Algorithm::HS256);
+
+    validation.insecure_disable_signature_validation();
+
+    let token_data =
+        jsonwebtoken::decode::<RawClaims>(token, key.unwrap(), &validation).context(DecodeSnafu {});
+
+    if let Ok(t) = token_data {
+        let iss = t.claims.get("iss");
+
+        if let Some(iss_val) = iss {
+            match iss_val {
+                Value::String(iss) => {
+                    let has_realm = iss.as_str().ends_with(format!("\\{}", realm).as_str());
+
+                    if has_realm {
+                        return true;
+                    }
+                },
+                _ => {},
+            }
+        }
+    }
+    false
 }
 
 pub(crate) async fn parse_raw_claims<R, Extra>(
