@@ -205,6 +205,7 @@ pub struct StandardClaims<Extra> {
     pub realm_access: Option<RealmAccess>,
     /// Keycloak: Optional client roles from Keycloak.
     pub resource_access: Option<ResourceAccess>,
+    pub groups: Option<Vec<String>>,
 
     #[serde(flatten)]
     pub extra: Extra,
@@ -279,6 +280,7 @@ where
 
     // Keycloak: Roles of the user.
     pub roles: Vec<KeycloakRole<R>>,
+    pub groups: Option<Vec<String>>,
 
     pub extra: Extra,
 }
@@ -314,6 +316,7 @@ where
                 (raw.realm_access, raw.resource_access).extract_roles(&mut roles);
                 roles
             },
+            groups: raw.groups,
             extra: raw.extra,
         })
     }
