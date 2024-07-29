@@ -6,9 +6,11 @@ use std::{
 use axum::{body::Body, response::IntoResponse};
 use futures::future::BoxFuture;
 use http::Request;
+use jsonwebtoken::errors::ErrorKind;
 use serde::de::DeserializeOwned;
 
 use crate::{extract, layer::KeycloakAuthLayer, role::Role, KeycloakAuthStatus, PassthroughMode};
+use crate::error::AuthError;
 
 #[derive(Clone)]
 pub struct KeycloakAuthService<S, R, Extra>
@@ -70,8 +72,20 @@ where
                     KeycloakAuthStatus::Success(_) => {
                         //skip current layer check if previous was successful
                         return inner.call(request).await;
-                    }
-                    KeycloakAuthStatus::Failure(_) => {
+                    },
+                    KeycloakAuthStatus::Failure(err) => {
+                        match err.as_ref() {
+                            AuthError::Decode {source} => {
+                                if source.kind() != &ErrorKind::InvalidSignature {
+                                    //skip current layer check if previous failed with error other than InvalidSignature
+                                    return inner.call(request).await;
+                                }
+                            }
+                            _ => {
+                                //skip current layer check if previous failed with error other than InvalidSignature
+                                return inner.call(request).await;
+                            }
+                        };
                     }
                 }
             }

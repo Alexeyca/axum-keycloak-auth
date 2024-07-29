@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::i64;
 use std::sync::Arc;
 use jsonwebtoken::{Algorithm, DecodingKey};
-
+use jsonwebtoken::errors::ErrorKind;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -52,9 +52,9 @@ impl<'a> RawToken<'a> {
             AuthError,
         > = Err(AuthError::NoDecodingKeys);
         for key in decoding_keys {
-            token_data =
-                jsonwebtoken::decode::<RawClaims>(self.0, key, &validation).context(DecodeSnafu {});
-            if token_data.is_ok() {
+            token_data = jsonwebtoken::decode::<RawClaims>(self.0, key, &validation).context(DecodeSnafu {});
+
+            if !should_check_with_another_key(&token_data) {
                 break;
             }
         }
@@ -63,6 +63,21 @@ impl<'a> RawToken<'a> {
         debug!(?raw_claims, "Decoded JWT data");
 
         Ok(raw_claims)
+    }
+}
+
+fn should_check_with_another_key(token_data: &Result<jsonwebtoken::TokenData<HashMap<String, Value>>, AuthError>) -> bool {
+    if let Err(AuthError::Decode {source}) = token_data {
+        match source.kind() {
+            ErrorKind::InvalidSignature => {
+                true
+            },
+            _ => {
+                false
+            }
+        }
+    } else {
+        false
     }
 }
 
